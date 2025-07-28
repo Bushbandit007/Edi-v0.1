@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat with EDI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: start;
+      min-height: 100vh;
+    }
+
+    h1 {
+      margin-top: 1rem;
+      color: #2a7d5f;
+    }
+
+    #chat {
+      width: 90%;
+      max-width: 600px;
+      height: 60vh;
+      border: 1px solid #ccc;
+      background: #fff;
+      padding: 10px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+      border-radius: 8px;
+    }
+
+    .message {
+      margin-bottom: 1rem;
+      padding: 8px;
+      border-radius: 6px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+
+    .user {
+      text-align: right;
+      background: #dceeff;
+      margin-left: auto;
+    }
+
+    .edi {
+      text-align: left;
+      background: #e9f5ec;
+      margin-right: auto;
+    }
+
+    #typing-indicator {
+      font-style: italic;
+      color: #888;
+      margin-bottom: 1rem;
+      width: 90%;
+      max-width: 600px;
+      text-align: left;
+      display: none;
+    }
+
+    #chat-form {
+      width: 90%;
+      max-width: 600px;
+      display: flex;
+      margin-bottom: 1rem;
+    }
+
+    #user-input {
+      flex: 1;
+      padding: 10px;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    button {
+      padding: 10px;
+      font-size: 1rem;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      margin-left: 5px;
+      cursor: pointer;
+    }
+
+    .footer-link {
+      text-align: center;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+
+    .footer-link a {
+      color: #2a7d5f;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Chat with EDI</h1>
+
+  <div id="chat"></div>
+  <div id="typing-indicator">EDI is typing...</div>
+
+  <form id="chat-form">
+    <input type="text" id="user-input" placeholder="Type your message..." required>
+    <button type="submit">Send</button>
+  </form>
+
+  <div class="footer-link">
+    <a href="/about.html">About EDI</a>
+  </div>
+
+  <script>
+    const chatDiv = document.getElementById('chat');
+    const chatForm = document.getElementById('chat-form');
+    const userInput = document.getElementById('user-input');
+    const typingIndicator = document.getElementById('typing-indicator');
+
+    let messages = JSON.parse(localStorage.getItem('edi_chat')) || [];
+    let username = localStorage.getItem('edi_user_name') || null;
+    let selectedVoice = null;
+
+    function setPreferredVoice() {
+      const voices = speechSynthesis.getVoices();
+      const preferredNames = [
+        "Google UK English Female",
+        "Google US English",
+        "Microsoft Aria",
+        "Microsoft Zira",
+        "Karen",
+        voices[0]?.name
+      ];
+      for (const name of preferredNames) {
+        const voice = voices.find(v => v.name.includes(name));
+        if (voice) {
+          selectedVoice = voice;
+          break;
+        }
+      }
+    }
+
+    function speak(text) {
+      if (!window.speechSynthesis || !selectedVoice) return;
+      const utterance = new SpeechSynthesisUtterance(text.replace(/([.?!])\s/g, "$1. "));
+      utterance.voice = selectedVoice;
+      utterance.rate = 0.92;
+      utterance.pitch = 1.08;
+      window.speechSynthesis.speak(utterance);
+    }
+
+      function addMessage(content, sender) {
+        const container = document.createElement('div');
+        container.className = 'message-container';
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${sender}`;
+        messageDiv.textContent = content;
+
+        if (sender === 'edi') {
+          const img = document.createElement('img');
+          img.src = 'edi-avatar.png'; // make sure this file exists in /public
+          img.alt = 'EDI';
+          img.className = 'edi-pic';
+          container.appendChild(img);
+        }
+
+        container.appendChild(messageDiv);
+        chatDiv.appendChild(container);
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+      }
+
+
+    function saveMessages() {
+      localStorage.setItem('edi_chat', JSON.stringify(messages));
+    }
+
+    function showTyping() {
+      typingIndicator.style.display = 'block';
+    }
+
+    function hideTyping() {
+      typingIndicator.style.display = 'none';
+    }
+
+    async function handleChat(userMessage) {
+      addMessage(userMessage, 'user');
+      messages.push({ role: 'user', content: userMessage });
+      saveMessages();
+      showTyping();
+      userInput.value = '';
+
+      try {
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages }),
+        });
+
+        const data = await response.json();
+        hideTyping();
+
+        if (data.reply) {
+          const reply = data.reply.content.replace(/\bUSERNAME\b/g, username);
+          addMessage(reply, 'edi');
+          speak(reply);
+          messages.push({ role: 'assistant', content: reply });
+          saveMessages();
+        } else {
+          const fallback = "Sorry, I encountered an error. Please try again.";
+          addMessage(fallback, 'edi');
+          speak(fallback);
+        }
+      } catch (err) {
+        hideTyping();
+        const fallback = "Sorry, something went wrong.";
+        addMessage(fallback, 'edi');
+        speak(fallback);
+        console.error(err);
+      }
+    }
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const msg = userInput.value.trim();
+      if (msg) handleChat(msg);
+    });
+
+    function restoreChat() {
+      messages.forEach(msg => {
+        const sender = msg.role === 'user' ? 'user' : 'edi';
+        const content = msg.content.replace(/\bUSERNAME\b/g, username);
+        addMessage(content, sender);
+      });
+    }
+
+    function initEDI() {
+      setPreferredVoice();
+      if (!username) {
+        username = prompt("Hi! I'm EDI. What should I call you?");
+        if (username) {
+          localStorage.setItem('edi_user_name', username);
+        } else {
+          username = "there";
+        }
+      }
+      const greeting = `Hello ${username}! I'm EDI. How are you feeling today?`;
+      if (messages.length === 0) {
+        addMessage(greeting, 'edi');
+        speak(greeting);
+        messages.push({ role: 'assistant', content: greeting });
+        saveMessages();
+      } else {
+        restoreChat();
+      }
+    }
+
+    if (speechSynthesis.getVoices().length > 0) {
+      initEDI();
+    } else {
+      speechSynthesis.addEventListener('voiceschanged', initEDI);
+    }
+  </script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Segoe UI', sans-serif;
+        background: #eef3f7;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: start;
+        min-height: 100vh;
+        padding-top: 40px;
+      }
+
+      h1 {
+        margin-bottom: 1rem;
+        font-size: 2rem;
+        color: #2a7d5f;
+      }
+
+      #chat {
+        width: 95%;
+        max-width: 700px;
+        height: 60vh;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        overflow-y: auto;
+        margin-bottom: 15px;
+      }
+
+      .message {
+        margin: 12px 0;
+        padding: 12px 16px;
+        border-radius: 12px;
+        max-width: 80%;
+        word-wrap: break-word;
+        font-size: 1rem;
+        line-height: 1.4;
+        animation: fadeIn 0.25s ease-out;
+      }
+
+      .user {
+        background: #d6ecff;
+        margin-left: auto;
+        text-align: right;
+      }
+
+      .edi {
+        background: #e6f6ed;
+        margin-right: auto;
+        text-align: left;
+      }
+
+      #typing-indicator {
+        font-style: italic;
+        color: #888;
+        margin-bottom: 1rem;
+        width: 95%;
+        max-width: 700px;
+        text-align: left;
+        display: none;
+      }
+
+      #chat-form {
+        width: 95%;
+        max-width: 700px;
+        display: flex;
+        gap: 10px;
+        margin-bottom: 2rem;
+      }
+
+      #user-input {
+        flex: 1;
+        padding: 12px;
+        font-size: 1rem;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+        transition: border-color 0.2s;
+      }
+
+      #user-input:focus {
+        border-color: #2a7d5f;
+        outline: none;
+      }
+
+      button {
+        padding: 12px 20px;
+        font-size: 1rem;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #409b44;
+      }
+
+      button:disabled {
+        background: #aaa;
+        cursor: not-allowed;
+      }
+
+      .footer-link {
+        text-align: center;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .footer-link a {
+        color: #2a7d5f;
+        text-decoration: none;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+        .message-container {
+          display: flex;
+          align-items: flex-start;
+          margin-bottom: 1rem;
+        }
+
+        .edi-pic {
+          width: 40px;
+          height: 40px;
+          margin-right: 10px;
+          border-radius: 50%;
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+    </style>
+
+</body>
+</html>
