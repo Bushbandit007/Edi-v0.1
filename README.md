@@ -24,3 +24,13 @@ Replit (development and test environment)
 🔒 Ethics & Privacy
 EDI doesn’t store personal data or conversations. All chat history is stored locally in your browser.
 No analytics, no ads, no tracking. We don’t know who you are, and that’s the point.
+
+Want to Help?
+
+Designers: improve UI
+
+Devs: optimise or expand features
+
+Writers: improve copy or ethics policy
+
+Mental health experts: guide EDI’s tone
